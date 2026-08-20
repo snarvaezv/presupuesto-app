@@ -19,9 +19,9 @@
     --line:#DDE3EC;
     --ink:#1C2A3A;
     --ink-soft:#5B6B80;
-    --primary:#009900;
-    --primary-dark:#046B0A;
-    --primary-tint:#E1F5E1;
+    --primary:#2C5AA0;
+    --primary-dark:#1E3F73;
+    --primary-tint:#E4ECF7;
     --ok:#2F9E67;
     --ok-tint:#E4F5EC;
     --warn:#C77D14;
@@ -551,7 +551,7 @@ async function cargarResumen(){
         const lblLower = lbl.toLowerCase();
         if(lblLower.includes('avance')){
           display = (val*100).toFixed(0)+'%';
-        } else if(lblLower.includes('día') || lblLower.includes('dia')){
+        } else if(lblLower.startsWith('día') || lblLower.startsWith('dia')){
           const n = Math.round(val);
           display = n + (n===1 ? ' día' : ' días');
         } else {
@@ -566,7 +566,9 @@ async function cargarResumen(){
       return;
     }
 
-    cont.innerHTML = r.categorias.map(c=>{
+    const categoriasOrdenadas = [...r.categorias].sort((a,b) => b.gastado - a.gastado);
+
+    cont.innerHTML = categoriasOrdenadas.map(c=>{
       const pctC = c.presupuestado ? (c.gastado/c.presupuestado)*100 : (c.gastado>0?100:0);
       let cls = 'ok';
       if(pctC >= 100) cls = 'over'; else if(pctC >= 80) cls = 'warn';
