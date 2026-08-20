@@ -1,0 +1,572 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1.0">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Presupuesto">
+<title>Presupuesto</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600;700&display=swap');
+
+  :root{
+    --bg:#EEF1F6;
+    --surface:#FFFFFF;
+    --surface-2:#F5F7FA;
+    --line:#DDE3EC;
+    --ink:#1C2A3A;
+    --ink-soft:#5B6B80;
+    --primary:#2C5AA0;
+    --primary-dark:#1E3F73;
+    --primary-tint:#E4ECF7;
+    --ok:#2F9E67;
+    --ok-tint:#E4F5EC;
+    --warn:#C77D14;
+    --warn-tint:#FBEEDC;
+    --danger:#C23B3B;
+    --danger-tint:#FBE7E7;
+    --radius:16px;
+    --safe-top: env(safe-area-inset-top);
+    --safe-bottom: env(safe-area-inset-bottom);
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+  html,body{margin:0;padding:0;height:100%;background:var(--bg);}
+  body{
+    font-family:'IBM Plex Sans',-apple-system,sans-serif;
+    color:var(--ink);
+    overscroll-behavior-y:none;
+  }
+  .num{font-family:'IBM Plex Mono',monospace; font-variant-numeric: tabular-nums;}
+
+  #app{
+    max-width:480px;
+    margin:0 auto;
+    min-height:100vh;
+    display:flex;
+    flex-direction:column;
+    background:var(--bg);
+    position:relative;
+  }
+
+  /* ---------- Header ---------- */
+  header{
+    padding:calc(18px + var(--safe-top)) 20px 16px;
+    background:linear-gradient(160deg,var(--primary-dark),var(--primary));
+    color:#fff;
+    border-radius:0 0 24px 24px;
+    position:relative;
+    overflow:hidden;
+  }
+  header::after{
+    content:"";
+    position:absolute; inset:0;
+    background-image:
+      repeating-linear-gradient(0deg, rgba(255,255,255,.05) 0 1px, transparent 1px 24px),
+      repeating-linear-gradient(90deg, rgba(255,255,255,.05) 0 1px, transparent 1px 24px);
+    pointer-events:none;
+  }
+  header .top-row{display:flex;justify-content:space-between;align-items:center; position:relative; z-index:1;}
+  header .month-label{font-size:13px; letter-spacing:.06em; text-transform:uppercase; opacity:.85; font-weight:600;}
+  header .month-value{font-size:20px; font-weight:700; margin-top:2px;}
+  header .gear-btn{
+    width:36px;height:36px;border-radius:10px;background:rgba(255,255,255,.14);
+    border:none; color:#fff; font-size:17px; display:flex; align-items:center; justify-content:center;
+  }
+  header .balance-row{display:flex; gap:14px; margin-top:18px; position:relative; z-index:1;}
+  header .balance-card{flex:1; background:rgba(255,255,255,.1); border-radius:12px; padding:10px 12px;}
+  header .balance-card .lbl{font-size:11px; opacity:.8; text-transform:uppercase; letter-spacing:.05em;}
+  header .balance-card .val{font-size:17px; font-weight:700; margin-top:3px;}
+  header .progress-track{height:6px; background:rgba(255,255,255,.18); border-radius:4px; margin-top:16px; overflow:hidden; position:relative; z-index:1;}
+  header .progress-fill{height:100%; background:#fff; border-radius:4px; transition:width .5s ease;}
+
+  /* ---------- Main scroll area ---------- */
+  main{flex:1; padding:18px 16px 100px; overflow-y:auto;}
+  .hidden{display:none !important;}
+
+  .card{background:var(--surface); border-radius:var(--radius); padding:16px; box-shadow:0 1px 2px rgba(28,42,58,.05), 0 1px 1px rgba(28,42,58,.04); border:1px solid var(--line);}
+  .card + .card{margin-top:12px;}
+  .section-title{font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:.07em; color:var(--ink-soft); margin:20px 2px 8px;}
+  .section-title:first-child{margin-top:0;}
+
+  /* ---------- Form ---------- */
+  label{display:block; font-size:12px; font-weight:600; color:var(--ink-soft); margin-bottom:6px; margin-top:14px;}
+  label:first-of-type{margin-top:0;}
+  input[type=date], input[type=text], input[type=number], select{
+    width:100%; padding:12px 13px; border-radius:11px; border:1.5px solid var(--line);
+    background:var(--surface-2); font-size:15.5px; color:var(--ink); font-family:inherit;
+  }
+  select{appearance:none; background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%235B6B80' stroke-width='1.6' fill='none' stroke-linecap='round'/%3E%3C/svg%3E"); background-repeat:no-repeat; background-position:right 14px center;}
+  input:focus, select:focus{outline:none; border-color:var(--primary); background:#fff;}
+  .valor-wrap{position:relative;}
+  .valor-wrap span{position:absolute; left:13px; top:50%; transform:translateY(-50%); color:var(--ink-soft); font-weight:600; font-size:15.5px;}
+  .valor-wrap input{padding-left:34px; font-family:'IBM Plex Mono',monospace; font-weight:600; font-size:17px;}
+
+  .tipo-toggle{display:flex; gap:8px; margin-top:14px;}
+  .tipo-toggle button{
+    flex:1; padding:10px 4px; border-radius:11px; border:1.5px solid var(--line); background:var(--surface-2);
+    font-family:inherit; font-weight:600; font-size:13.5px; color:var(--ink-soft);
+  }
+  .tipo-toggle button.active-gasto{background:var(--danger-tint); border-color:var(--danger); color:var(--danger);}
+  .tipo-toggle button.active-ingreso{background:var(--ok-tint); border-color:var(--ok); color:var(--ok);}
+
+  .btn-primary{
+    width:100%; margin-top:20px; padding:15px; border:none; border-radius:13px;
+    background:var(--primary); color:#fff; font-size:16px; font-weight:700; font-family:inherit;
+  }
+  .btn-primary:active{background:var(--primary-dark);}
+  .btn-primary:disabled{opacity:.55;}
+  .btn-secondary{
+    width:100%; padding:13px; border-radius:12px; border:1.5px solid var(--line); background:var(--surface);
+    color:var(--ink); font-weight:600; font-size:14.5px; font-family:inherit; margin-top:10px;
+  }
+
+  .toast{
+    position:fixed; left:16px; right:16px; bottom:calc(88px + var(--safe-bottom)); max-width:448px; margin:0 auto;
+    background:var(--ink); color:#fff; padding:13px 16px; border-radius:12px; font-size:14px; font-weight:500;
+    display:flex; align-items:center; gap:10px; z-index:50; box-shadow:0 8px 20px rgba(0,0,0,.2);
+    transition:transform .25s ease, opacity .25s ease;
+  }
+  .toast.ok{background:var(--ok);}
+  .toast.err{background:var(--danger);}
+  .toast.warn{background:var(--warn);}
+
+  /* pending badge */
+  .pending-pill{
+    display:inline-flex; align-items:center; gap:6px; background:var(--warn-tint); color:var(--warn);
+    font-size:12.5px; font-weight:600; padding:7px 11px; border-radius:20px; margin-bottom:12px;
+  }
+  .pending-pill button{background:none; border:none; color:var(--warn); font-weight:700; font-size:12.5px; text-decoration:underline; font-family:inherit;}
+
+  /* ---------- Resumen ---------- */
+  .stat-grid{display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:14px;}
+  .stat-box{background:var(--surface); border:1px solid var(--line); border-radius:14px; padding:12px 14px;}
+  .stat-box .lbl{font-size:11px; color:var(--ink-soft); text-transform:uppercase; letter-spacing:.05em; font-weight:600;}
+  .stat-box .val{font-size:16.5px; font-weight:700; margin-top:4px;}
+
+  .cat-row{padding:12px 0; border-bottom:1px solid var(--line);}
+  .cat-row:last-child{border-bottom:none;}
+  .cat-row .cat-top{display:flex; justify-content:space-between; align-items:baseline; margin-bottom:7px;}
+  .cat-row .cat-name{font-size:14.5px; font-weight:600;}
+  .cat-row .cat-amounts{font-size:12.5px; color:var(--ink-soft);}
+  .cat-row .cat-amounts b{color:var(--ink); font-weight:600;}
+  .bar-track{height:8px; background:var(--surface-2); border-radius:5px; overflow:hidden; position:relative;}
+  .bar-track::before{ /* tick marks, blueprint nod */
+    content:""; position:absolute; inset:0;
+    background-image:repeating-linear-gradient(90deg, rgba(28,42,58,.08) 0 1px, transparent 1px 10%);
+  }
+  .bar-fill{height:100%; border-radius:5px; position:relative; z-index:1; transition:width .4s ease;}
+  .bar-fill.ok{background:var(--ok);}
+  .bar-fill.warn{background:var(--warn);}
+  .bar-fill.over{background:var(--danger);}
+
+  .empty-state{text-align:center; padding:40px 20px; color:var(--ink-soft);}
+  .empty-state .ic{font-size:34px; margin-bottom:10px;}
+
+  /* ---------- Ajustes ---------- */
+  .conn-status{display:flex; align-items:center; gap:8px; font-size:13.5px; font-weight:600; margin-top:12px;}
+  .dot{width:9px; height:9px; border-radius:50%; background:var(--ink-soft);}
+  .dot.ok{background:var(--ok);}
+  .dot.err{background:var(--danger);}
+  .help-text{font-size:12.5px; color:var(--ink-soft); line-height:1.5; margin-top:6px;}
+
+  /* ---------- Tab bar ---------- */
+  nav{
+    position:fixed; left:0; right:0; bottom:0; max-width:480px; margin:0 auto;
+    background:rgba(255,255,255,.92); backdrop-filter:blur(14px);
+    border-top:1px solid var(--line);
+    display:flex; padding:8px 10px calc(8px + var(--safe-bottom));
+    z-index:40;
+  }
+  nav button{
+    flex:1; background:none; border:none; display:flex; flex-direction:column; align-items:center; gap:3px;
+    padding:6px 0; color:var(--ink-soft); font-family:inherit;
+  }
+  nav button .ic{font-size:20px;}
+  nav button .lbl{font-size:10.5px; font-weight:600;}
+  nav button.active{color:var(--primary);}
+
+  ::-webkit-scrollbar{display:none;}
+</style>
+</head>
+<body>
+<div id="app">
+
+  <header>
+    <div class="top-row">
+      <div>
+        <div class="month-label" id="hdrMonthLabel">Cargando…</div>
+        <div class="month-value" id="hdrMonthValue">—</div>
+      </div>
+      <button class="gear-btn" onclick="showView('ajustes')">⚙</button>
+    </div>
+    <div class="balance-row">
+      <div class="balance-card">
+        <div class="lbl">Gastado</div>
+        <div class="val num" id="hdrGastado">$0</div>
+      </div>
+      <div class="balance-card">
+        <div class="lbl">Presupuestado</div>
+        <div class="val num" id="hdrPresupuestado">$0</div>
+      </div>
+    </div>
+    <div class="progress-track"><div class="progress-fill" id="hdrProgress" style="width:0%"></div></div>
+  </header>
+
+  <main>
+
+    <!-- ===== VISTA: REGISTRAR ===== -->
+    <div id="view-registrar">
+      <div id="pendingPill" class="hidden pending-pill">
+        ⏳ <span id="pendingCount">0</span> gasto(s) por sincronizar
+        <button onclick="syncPending(true)">reintentar</button>
+      </div>
+
+      <div class="card">
+        <div class="tipo-toggle">
+          <button id="btnGasto" class="active-gasto" onclick="setNaturaleza('gasto')">− Gasto</button>
+          <button id="btnIngreso" onclick="setNaturaleza('ingreso')">+ Ingreso</button>
+        </div>
+
+        <label>Fecha</label>
+        <input type="date" id="fFecha">
+
+        <label>Categoría</label>
+        <select id="fTipo"></select>
+
+        <label>Valor (COP)</label>
+        <div class="valor-wrap">
+          <span>$</span>
+          <input type="number" id="fValor" inputmode="decimal" placeholder="0" min="0">
+        </div>
+
+        <label>Observación</label>
+        <input type="text" id="fObs" placeholder="Ej. Mercado D1">
+
+        <label>Obs 2 <span style="font-weight:400;color:var(--ink-soft)">(opcional)</span></label>
+        <input type="text" id="fObs2" placeholder="Ej. Rappi">
+
+        <button class="btn-primary" id="btnGuardar" onclick="guardarRegistro()">Guardar</button>
+      </div>
+    </div>
+
+    <!-- ===== VISTA: RESUMEN ===== -->
+    <div id="view-resumen" class="hidden">
+      <label style="margin-top:0">Mes</label>
+      <input type="date" id="rMes" onchange="cargarResumen()">
+
+      <div id="resumenGeneral" class="stat-grid"></div>
+
+      <div class="section-title">Presupuesto por categoría</div>
+      <div class="card" id="resumenCategorias">
+        <div class="empty-state"><div class="ic">📊</div>Cargando resumen…</div>
+      </div>
+    </div>
+
+    <!-- ===== VISTA: AJUSTES ===== -->
+    <div id="view-ajustes" class="hidden">
+      <div class="card">
+        <label style="margin-top:0">URL de la app web (Apps Script)</label>
+        <input type="text" id="sUrl" placeholder="https://script.google.com/macros/s/…/exec">
+        <label>Token secreto</label>
+        <input type="text" id="sToken" placeholder="Tu clave del script">
+        <div class="conn-status"><span class="dot" id="connDot"></span><span id="connText">Sin verificar</span></div>
+        <button class="btn-primary" onclick="guardarConfig()">Guardar</button>
+        <button class="btn-secondary" onclick="probarConexion()">Probar conexión</button>
+        <div class="help-text">Esta URL viene de: Extensiones → Apps Script → Implementar → Nueva implementación, en tu Google Sheet de presupuesto. El token es el que definiste en la línea <code>var TOKEN = '...'</code> del script.</div>
+      </div>
+    </div>
+
+  </main>
+
+  <nav>
+    <button id="navRegistrar" class="active" onclick="showView('registrar')"><span class="ic">＋</span><span class="lbl">Registrar</span></button>
+    <button id="navResumen" onclick="showView('resumen')"><span class="ic">▤</span><span class="lbl">Resumen</span></button>
+    <button id="navAjustes" onclick="showView('ajustes')"><span class="ic">⚙</span><span class="lbl">Ajustes</span></button>
+  </nav>
+
+</div>
+
+<script>
+const MESES = ['ENERO','FEBRERO','MARZO','ABRIL','MAYO','JUNIO','JULIO','AGOSTO','SEPTIEMBRE','OCTUBRE','NOVIEMBRE','DICIEMBRE'];
+
+const CATEGORIAS_FALLBACK = [
+  'Arriendo','Deuda Papá','Transporte público','Ocio','Moto','Gasolina moto','Seguro moto',
+  'Comida por fuera','Mercado','Crédito Bancolombia','Bicicleta','Agua','Celular mamá',
+  'Celular sebas','Abuela','Parqueadero moto','Google photos','Spotify','Energía','Otro',
+  'iCloud','Ropa','Odontología'
+];
+
+let CONFIG = { url:'', token:'' };
+let naturaleza = 'gasto';
+let catCache = {}; // sheetName -> categorias[]
+
+const fmt = new Intl.NumberFormat('es-CO', {style:'currency', currency:'COP', maximumFractionDigits:0});
+
+function todayStr(){
+  const d = new Date();
+  const tz = d.getTimezoneOffset()*60000;
+  return new Date(d - tz).toISOString().slice(0,10);
+}
+
+function sheetNameFromDate(dateStr){
+  const [y,m] = dateStr.split('-').map(Number);
+  return MESES[m-1] + ' ' + y;
+}
+
+/* ---------------- storage helpers (localStorage: vive en este navegador/iPhone) ---------------- */
+async function loadConfig(){
+  try{
+    const raw = localStorage.getItem('presupuesto_config');
+    if(raw) CONFIG = JSON.parse(raw);
+  }catch(e){}
+  document.getElementById('sUrl').value = CONFIG.url || '';
+  document.getElementById('sToken').value = CONFIG.token || '';
+}
+async function saveConfigToStorage(){
+  localStorage.setItem('presupuesto_config', JSON.stringify(CONFIG));
+}
+async function getPending(){
+  try{
+    const raw = localStorage.getItem('presupuesto_pending');
+    return raw ? JSON.parse(raw) : [];
+  }catch(e){ return []; }
+}
+async function setPending(list){
+  localStorage.setItem('presupuesto_pending', JSON.stringify(list));
+  refreshPendingPill(list);
+}
+function refreshPendingPill(list){
+  const pill = document.getElementById('pendingPill');
+  if(list.length > 0){
+    pill.classList.remove('hidden');
+    document.getElementById('pendingCount').textContent = list.length;
+  } else {
+    pill.classList.add('hidden');
+  }
+}
+
+/* ---------------- API ---------------- */
+async function apiGet(action, params){
+  if(!CONFIG.url || !CONFIG.token) throw new Error('Falta configurar la conexión en Ajustes');
+  const u = new URL(CONFIG.url);
+  u.searchParams.set('action', action);
+  u.searchParams.set('token', CONFIG.token);
+  Object.entries(params||{}).forEach(([k,v]) => u.searchParams.set(k,v));
+  const res = await fetch(u.toString(), { method:'GET' });
+  const json = await res.json();
+  if(!json.ok) throw new Error(json.error || 'Error desconocido');
+  return json;
+}
+async function apiPost(payload){
+  if(!CONFIG.url || !CONFIG.token) throw new Error('Falta configurar la conexión en Ajustes');
+  payload.token = CONFIG.token;
+  const res = await fetch(CONFIG.url, { method:'POST', body: JSON.stringify(payload) });
+  const json = await res.json();
+  if(!json.ok) throw new Error(json.error || 'Error desconocido');
+  return json;
+}
+
+/* ---------------- Toast ---------------- */
+let toastTimer;
+function toast(msg, type){
+  let el = document.querySelector('.toast');
+  if(el) el.remove();
+  el = document.createElement('div');
+  el.className = 'toast ' + (type||'');
+  el.textContent = msg;
+  document.getElementById('app').appendChild(el);
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(()=> el.remove(), 3200);
+}
+
+/* ---------------- Views ---------------- */
+function showView(name){
+  ['registrar','resumen','ajustes'].forEach(v=>{
+    document.getElementById('view-'+v).classList.toggle('hidden', v!==name);
+    document.getElementById('nav'+v.charAt(0).toUpperCase()+v.slice(1)).classList.toggle('active', v===name);
+  });
+  if(name==='resumen') cargarResumen();
+}
+
+/* ---------------- Registrar ---------------- */
+function setNaturaleza(n){
+  naturaleza = n;
+  document.getElementById('btnGasto').classList.toggle('active-gasto', n==='gasto');
+  document.getElementById('btnIngreso').classList.toggle('active-ingreso', n==='ingreso');
+}
+
+async function poblarCategorias(){
+  const sel = document.getElementById('fTipo');
+  const fecha = document.getElementById('fFecha').value || todayStr();
+  const sheet = sheetNameFromDate(fecha);
+  let cats = catCache[sheet];
+  if(!cats){
+    try{
+      const r = await apiGet('resumen', {sheet});
+      cats = r.categorias.map(c=>c.nombre);
+      catCache[sheet] = cats;
+    }catch(e){
+      cats = CATEGORIAS_FALLBACK;
+    }
+  }
+  sel.innerHTML = cats.map(c=>`<option value="${c}">${c}</option>`).join('');
+}
+
+async function guardarRegistro(){
+  const fecha = document.getElementById('fFecha').value;
+  const tipo = document.getElementById('fTipo').value;
+  let valor = parseFloat(document.getElementById('fValor').value);
+  const obs = document.getElementById('fObs').value.trim();
+  const obs2 = document.getElementById('fObs2').value.trim();
+
+  if(!fecha){ toast('Selecciona una fecha', 'err'); return; }
+  if(!tipo){ toast('Selecciona una categoría', 'err'); return; }
+  if(!valor || valor <= 0){ toast('Ingresa un valor válido', 'err'); return; }
+  if(naturaleza === 'ingreso') valor = -Math.abs(valor); // los ingresos restan del acumulado de gastos, como en tu Excel
+
+  const sheet = sheetNameFromDate(fecha);
+  const payload = { action:'gasto', sheet, fecha, tipo, valor, obs, obs2 };
+
+  const btn = document.getElementById('btnGuardar');
+  btn.disabled = true; btn.textContent = 'Guardando…';
+
+  try{
+    const r = await apiPost(payload);
+    toast(`Guardado en ${sheet}, fila ${r.fila}`, 'ok');
+    limpiarFormulario();
+    delete catCache[sheet];
+  }catch(e){
+    const pending = await getPending();
+    pending.push(payload);
+    await setPending(pending);
+    toast('Sin conexión: guardado localmente, se sincronizará luego', 'warn');
+    limpiarFormulario();
+  }finally{
+    btn.disabled = false; btn.textContent = 'Guardar';
+  }
+}
+
+function limpiarFormulario(){
+  document.getElementById('fValor').value = '';
+  document.getElementById('fObs').value = '';
+  document.getElementById('fObs2').value = '';
+  setNaturaleza('gasto');
+}
+
+async function syncPending(manual){
+  let pending = await getPending();
+  if(pending.length === 0){ if(manual) toast('No hay pendientes', 'ok'); return; }
+  const remaining = [];
+  let sent = 0;
+  for(const p of pending){
+    try{ await apiPost(p); sent++; }
+    catch(e){ remaining.push(p); }
+  }
+  await setPending(remaining);
+  if(sent > 0) toast(`${sent} registro(s) sincronizado(s)`, 'ok');
+  else if(manual) toast('Todavía sin conexión', 'err');
+}
+
+/* ---------------- Resumen ---------------- */
+async function cargarResumen(){
+  const fecha = document.getElementById('rMes').value || todayStr();
+  const sheet = sheetNameFromDate(fecha);
+  const cont = document.getElementById('resumenCategorias');
+  const gen = document.getElementById('resumenGeneral');
+  try{
+    const r = await apiGet('resumen', {sheet});
+    catCache[sheet] = r.categorias.map(c=>c.nombre);
+
+    document.getElementById('hdrMonthLabel').textContent = sheet;
+    document.getElementById('hdrMonthValue').textContent = fmt.format(r.totalGastado) + ' gastado';
+    document.getElementById('hdrGastado').textContent = fmt.format(r.totalGastado);
+    document.getElementById('hdrPresupuestado').textContent = fmt.format(r.totalPresupuestado);
+    const pct = r.totalPresupuestado ? Math.min(100, (r.totalGastado/r.totalPresupuestado)*100) : 0;
+    document.getElementById('hdrProgress').style.width = pct + '%';
+
+    const g = r.general || {};
+    const statDefs = [
+      ['Saldo', g['Saldo']], ['Avance del mes', g['Avance del mes']],
+      ['Días restantes', g['Días restantes']], ['Gasto diario restant', g['Gasto diario restant']]
+    ];
+    gen.innerHTML = statDefs.filter(([,v])=>v!==undefined).map(([lbl,val])=>{
+      let display = val;
+      if(typeof val === 'number'){
+        display = (lbl.toLowerCase().includes('avance')) ? (val*100).toFixed(0)+'%' : fmt.format(val);
+      }
+      return `<div class="stat-box"><div class="lbl">${lbl}</div><div class="val num">${display}</div></div>`;
+    }).join('');
+
+    if(r.categorias.length === 0){
+      cont.innerHTML = `<div class="empty-state"><div class="ic">📭</div>Sin categorías configuradas en ${sheet}</div>`;
+      return;
+    }
+
+    cont.innerHTML = r.categorias.map(c=>{
+      const pctC = c.presupuestado ? (c.gastado/c.presupuestado)*100 : (c.gastado>0?100:0);
+      let cls = 'ok';
+      if(pctC >= 100) cls = 'over'; else if(pctC >= 80) cls = 'warn';
+      return `
+        <div class="cat-row">
+          <div class="cat-top">
+            <div class="cat-name">${c.nombre}</div>
+            <div class="cat-amounts"><b class="num">${fmt.format(c.gastado)}</b> / <span class="num">${fmt.format(c.presupuestado)}</span></div>
+          </div>
+          <div class="bar-track"><div class="bar-fill ${cls}" style="width:${Math.min(100,pctC)}%"></div></div>
+        </div>`;
+    }).join('');
+  }catch(e){
+    cont.innerHTML = `<div class="empty-state"><div class="ic">⚠️</div>${e.message}</div>`;
+  }
+}
+
+/* ---------------- Ajustes ---------------- */
+async function guardarConfig(){
+  CONFIG.url = document.getElementById('sUrl').value.trim();
+  CONFIG.token = document.getElementById('sToken').value.trim();
+  await saveConfigToStorage();
+  toast('Configuración guardada', 'ok');
+  probarConexion();
+}
+async function probarConexion(){
+  const dot = document.getElementById('connDot');
+  const text = document.getElementById('connText');
+  text.textContent = 'Verificando…';
+  dot.className = 'dot';
+  try{
+    await apiGet('ping', {});
+    dot.className = 'dot ok';
+    text.textContent = 'Conectado';
+    poblarCategorias();
+  }catch(e){
+    dot.className = 'dot err';
+    text.textContent = e.message;
+  }
+}
+
+/* ---------------- Init ---------------- */
+(async function init(){
+  await loadConfig();
+  const t = todayStr();
+  document.getElementById('fFecha').value = t;
+  document.getElementById('rMes').value = t;
+  document.getElementById('hdrMonthLabel').textContent = sheetNameFromDate(t);
+  document.getElementById('fFecha').addEventListener('change', poblarCategorias);
+
+  await poblarCategorias();
+  const pending = await getPending();
+  refreshPendingPill(pending);
+
+  if(CONFIG.url && CONFIG.token){
+    probarConexion();
+    cargarResumen();
+    syncPending(false);
+  } else {
+    showView('ajustes');
+    toast('Configura tu conexión con Google Sheets para empezar', 'warn');
+  }
+})();
+</script>
+</body>
+</html>
