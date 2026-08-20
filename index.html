@@ -106,6 +106,15 @@
   .valor-wrap span{position:absolute; left:13px; top:50%; transform:translateY(-50%); color:var(--ink-soft); font-weight:600; font-size:15.5px;}
   .valor-wrap input{padding-left:34px; font-family:'IBM Plex Mono',monospace; font-weight:600; font-size:17px;}
 
+  .pwd-wrap{position:relative;}
+  .pwd-wrap input{padding-right:42px; font-family:'IBM Plex Mono',monospace; letter-spacing:.03em;}
+  .pwd-wrap .eye-btn{
+    position:absolute; right:6px; top:50%; transform:translateY(-50%);
+    width:32px; height:32px; border:none; background:none; font-size:16px;
+    display:flex; align-items:center; justify-content:center; color:var(--ink-soft); opacity:.6;
+  }
+  .pwd-wrap .eye-btn.active{opacity:1; color:var(--primary);}
+
   .tipo-toggle{display:flex; gap:8px; margin-top:14px;}
   .tipo-toggle button{
     flex:1; padding:10px 4px; border-radius:11px; border:1.5px solid var(--line); background:var(--surface-2);
@@ -277,7 +286,10 @@
         <label style="margin-top:0">URL de la app web (Apps Script)</label>
         <input type="text" id="sUrl" placeholder="https://script.google.com/macros/s/…/exec">
         <label>Token secreto</label>
-        <input type="text" id="sToken" placeholder="Tu clave del script">
+        <div class="pwd-wrap">
+          <input type="password" id="sToken" placeholder="Tu clave del script">
+          <button type="button" class="eye-btn" id="toggleTokenBtn" onclick="toggleTokenVisibility()" aria-label="Mostrar u ocultar token">👁</button>
+        </div>
         <div class="conn-status"><span class="dot" id="connDot"></span><span id="connText">Sin verificar</span></div>
         <button class="btn-primary" onclick="guardarConfig()">Guardar</button>
         <button class="btn-secondary" onclick="probarConexion()">Probar conexión</button>
@@ -536,7 +548,15 @@ async function cargarResumen(){
     gen.innerHTML = statDefs.filter(([,v])=>v!==undefined).map(([lbl,val])=>{
       let display = val;
       if(typeof val === 'number'){
-        display = (lbl.toLowerCase().includes('avance')) ? (val*100).toFixed(0)+'%' : fmt.format(val);
+        const lblLower = lbl.toLowerCase();
+        if(lblLower.includes('avance')){
+          display = (val*100).toFixed(0)+'%';
+        } else if(lblLower.includes('día') || lblLower.includes('dia')){
+          const n = Math.round(val);
+          display = n + (n===1 ? ' día' : ' días');
+        } else {
+          display = fmt.format(val);
+        }
       }
       return `<div class="stat-box"><div class="lbl">${lbl}</div><div class="val num">${display}</div></div>`;
     }).join('');
@@ -565,6 +585,14 @@ async function cargarResumen(){
 }
 
 /* ---------------- Ajustes ---------------- */
+function toggleTokenVisibility(){
+  const input = document.getElementById('sToken');
+  const btn = document.getElementById('toggleTokenBtn');
+  const showing = input.type === 'text';
+  input.type = showing ? 'password' : 'text';
+  btn.classList.toggle('active', !showing);
+}
+
 async function guardarConfig(){
   CONFIG.url = document.getElementById('sUrl').value.trim();
   CONFIG.token = document.getElementById('sToken').value.trim();
