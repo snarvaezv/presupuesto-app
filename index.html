@@ -176,6 +176,28 @@
   .empty-state{text-align:center; padding:40px 20px; color:var(--ink-soft);}
   .empty-state .ic{font-size:34px; margin-bottom:10px;}
 
+  /* ---------- Deuda módulo ---------- */
+  .ring-wrap{position:relative; width:150px; height:150px; margin:4px auto 0;}
+  .ring-svg{width:100%; height:100%; transform:rotate(-90deg);}
+  .ring-track{fill:none; stroke:var(--surface-2); stroke-width:12;}
+  .ring-fill{fill:none; stroke:var(--primary); stroke-width:12; stroke-linecap:round;
+    stroke-dasharray:377; stroke-dashoffset:377; transition:stroke-dashoffset .6s ease;}
+  .ring-center{position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center;}
+  .ring-pct{font-size:26px; font-weight:700; color:var(--primary);}
+  .ring-lbl{font-size:11.5px; color:var(--ink-soft); text-transform:uppercase; letter-spacing:.05em; font-weight:600; margin-top:2px;}
+
+  .concepto-row{display:flex; justify-content:space-between; align-items:center; padding:9px 0; border-bottom:1px solid var(--line); font-size:14px;}
+  .concepto-row:last-child{border-bottom:none;}
+  .concepto-row .val{font-weight:600;}
+
+  .abono-row{display:flex; justify-content:space-between; align-items:center; padding:11px 0; border-bottom:1px solid var(--line);}
+  .abono-row:last-child{border-bottom:none;}
+  .abono-row .left{display:flex; flex-direction:column;}
+  .abono-row .cuota-num{font-size:11.5px; color:var(--ink-soft); font-weight:600;}
+  .abono-row .fecha{font-size:13.5px; font-weight:600;}
+  .abono-row .nota{font-size:12px; color:var(--ink-soft); margin-top:1px;}
+  .abono-row .val{font-weight:700; color:var(--ok);}
+
   /* ---------- Ajustes ---------- */
   .conn-status{display:flex; align-items:center; gap:8px; font-size:13.5px; font-weight:600; margin-top:12px;}
   .dot{width:9px; height:9px; border-radius:50%; background:var(--ink-soft);}
@@ -295,6 +317,63 @@
         <button class="btn-secondary" onclick="probarConexion()">Probar conexión</button>
         <div class="help-text">Esta URL viene de: Extensiones → Apps Script → Implementar → Nueva implementación, en tu Google Sheet de presupuesto. El token es el que definiste en la línea <code>var TOKEN = '...'</code> del script.</div>
       </div>
+
+      <div class="section-title">Mes nuevo</div>
+      <div class="card">
+        <label style="margin-top:0">Mes a crear</label>
+        <input type="date" id="nmFecha">
+        <div class="help-text" id="nmPreview"></div>
+        <button class="btn-primary" id="btnCrearMes" onclick="crearMesNuevoHandler()">Crear mes</button>
+        <div class="help-text">Duplica la hoja del mes anterior con su mismo formato, corrige las fórmulas internas y limpia el log de transacciones para que arranques en cero. Los presupuestos por categoría (columna J) quedan iguales al mes anterior — ajústalos en el Sheet si cambian.</div>
+      </div>
+    </div>
+
+    <!-- ===== VISTA: DEUDA PAPÁ ===== -->
+    <div id="view-deuda" class="hidden">
+      <div class="card" style="text-align:center;">
+        <div class="ring-wrap">
+          <svg viewBox="0 0 140 140" class="ring-svg">
+            <circle cx="70" cy="70" r="60" class="ring-track"/>
+            <circle cx="70" cy="70" r="60" class="ring-fill" id="deudaRingFill"/>
+          </svg>
+          <div class="ring-center">
+            <div class="ring-pct num" id="deudaPct">0%</div>
+            <div class="ring-lbl">pagado</div>
+          </div>
+        </div>
+        <div class="stat-grid" style="margin-top:16px;">
+          <div class="stat-box">
+            <div class="lbl">Pagado</div>
+            <div class="val num" id="deudaPagado" style="color:var(--ok)">$0</div>
+          </div>
+          <div class="stat-box">
+            <div class="lbl">Pendiente</div>
+            <div class="val num" id="deudaPendiente" style="color:var(--danger)">$0</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="section-title">Registrar abono</div>
+      <div class="card">
+        <label style="margin-top:0">Fecha</label>
+        <input type="date" id="dFecha">
+        <label>Valor (COP)</label>
+        <div class="valor-wrap"><span>$</span><input type="number" id="dValor" inputmode="decimal" placeholder="0" min="0"></div>
+        <label>Nota <span style="font-weight:400;color:var(--ink-soft)">(opcional)</span></label>
+        <input type="text" id="dNota" placeholder="Ej. Abono extra">
+        <div class="help-text">Este abono cuenta automáticamente como el gasto del mes en la categoría "Deuda papá" — no lo registres también en la pestaña Registrar.</div>
+        <button class="btn-primary" id="btnAbono" onclick="registrarAbono()">Registrar abono</button>
+      </div>
+
+      <div class="section-title">¿En qué se usó el préstamo?</div>
+      <div class="card" id="deudaConceptos">
+        <div class="empty-state"><div class="ic">📄</div>Cargando…</div>
+      </div>
+
+      <div class="section-title">Historial de abonos</div>
+      <div class="card" id="deudaHistorial">
+        <div class="empty-state"><div class="ic">🧾</div>Cargando…</div>
+      </div>
     </div>
 
   </main>
@@ -302,6 +381,7 @@
   <nav>
     <button id="navRegistrar" class="active" onclick="showView('registrar')"><span class="ic">＋</span><span class="lbl">Registrar</span></button>
     <button id="navResumen" onclick="showView('resumen')"><span class="ic">▤</span><span class="lbl">Resumen</span></button>
+    <button id="navDeuda" onclick="showView('deuda')"><span class="ic">🎯</span><span class="lbl">Deuda</span></button>
     <button id="navAjustes" onclick="showView('ajustes')"><span class="ic">⚙</span><span class="lbl">Ajustes</span></button>
   </nav>
 
@@ -402,11 +482,12 @@ function toast(msg, type){
 
 /* ---------------- Views ---------------- */
 function showView(name){
-  ['registrar','resumen','ajustes'].forEach(v=>{
+  ['registrar','resumen','deuda','ajustes'].forEach(v=>{
     document.getElementById('view-'+v).classList.toggle('hidden', v!==name);
     document.getElementById('nav'+v.charAt(0).toUpperCase()+v.slice(1)).classList.toggle('active', v===name);
   });
   if(name==='resumen') cargarResumen();
+  if(name==='deuda') cargarDeuda();
 }
 
 /* ---------------- Registrar ---------------- */
@@ -586,6 +667,109 @@ async function cargarResumen(){
   }
 }
 
+/* ---------------- Deuda papá ---------------- */
+const RING_CIRC = 2 * Math.PI * 60; // r=60
+
+async function cargarDeuda(){
+  const conceptosEl = document.getElementById('deudaConceptos');
+  const historialEl = document.getElementById('deudaHistorial');
+  try{
+    const r = await apiGet('deuda', {});
+
+    const pct = Math.min(100, Math.round(r.pctPagado * 100));
+    document.getElementById('deudaPct').textContent = pct + '%';
+    document.getElementById('deudaPagado').textContent = fmt.format(r.pagado);
+    document.getElementById('deudaPendiente').textContent = fmt.format(r.debo);
+    const offset = RING_CIRC - (RING_CIRC * pct / 100);
+    document.getElementById('deudaRingFill').style.strokeDasharray = RING_CIRC;
+    document.getElementById('deudaRingFill').style.strokeDashoffset = offset;
+
+    conceptosEl.innerHTML = r.conceptos.length ? r.conceptos.map(c=>
+      `<div class="concepto-row"><span>${c.nombre}</span><span class="val num">${fmt.format(c.valor)}</span></div>`
+    ).join('') : `<div class="empty-state"><div class="ic">📄</div>Sin conceptos registrados</div>`;
+
+    const hist = [...r.cuotas].reverse();
+    historialEl.innerHTML = hist.length ? hist.map(c=>
+      `<div class="abono-row">
+        <div class="left">
+          <span class="cuota-num">CUOTA ${c.cuota}</span>
+          <span class="fecha">${c.fecha}</span>
+          ${c.nota ? `<span class="nota">${c.nota}</span>` : ''}
+        </div>
+        <div class="val num">${fmt.format(c.valor)}</div>
+      </div>`
+    ).join('') : `<div class="empty-state"><div class="ic">🧾</div>Todavía no hay abonos registrados</div>`;
+  }catch(e){
+    conceptosEl.innerHTML = `<div class="empty-state"><div class="ic">⚠️</div>${e.message}</div>`;
+    historialEl.innerHTML = '';
+  }
+}
+
+async function registrarAbono(){
+  const fecha = document.getElementById('dFecha').value;
+  const valor = parseFloat(document.getElementById('dValor').value);
+  const nota = document.getElementById('dNota').value.trim();
+
+  if(!fecha){ toast('Selecciona una fecha', 'err'); return; }
+  if(!valor || valor <= 0){ toast('Ingresa un valor válido', 'err'); return; }
+
+  const sheetMes = sheetNameFromDate(fecha);
+  const btn = document.getElementById('btnAbono');
+  btn.disabled = true; btn.textContent = 'Registrando…';
+  try{
+    const r = await apiPost({ action:'abono', fecha, valor, nota, sheetMes });
+    toast(`Abono #${r.cuota} registrado — también contado en ${sheetMes}`, 'ok');
+    document.getElementById('dValor').value = '';
+    document.getElementById('dNota').value = '';
+    delete catCache[sheetMes];
+    cargarDeuda();
+  }catch(e){
+    toast(e.message, 'err');
+  }finally{
+    btn.disabled = false; btn.textContent = 'Registrar abono';
+  }
+}
+
+/* ---------------- Mes nuevo ---------------- */
+function prevMonthSheet(dateStr){
+  const [y,m] = dateStr.split('-').map(Number);
+  let py = y, pm = m - 1;
+  if(pm < 1){ pm = 12; py -= 1; }
+  const mm = String(pm).padStart(2,'0');
+  return sheetNameFromDate(`${py}-${mm}-01`);
+}
+function nextMonthFirstDay(){
+  const d = new Date();
+  const y = d.getFullYear(), m = d.getMonth();
+  const ny = m===11 ? y+1 : y;
+  const nm = m===11 ? 0 : m+1;
+  return `${ny}-${String(nm+1).padStart(2,'0')}-01`;
+}
+function actualizarPreviewMesNuevo(){
+  const fecha = document.getElementById('nmFecha').value;
+  if(!fecha) return;
+  const destino = sheetNameFromDate(fecha);
+  const origen = prevMonthSheet(fecha);
+  document.getElementById('nmPreview').textContent = `Se creará "${destino}" copiando el formato de "${origen}".`;
+}
+async function crearMesNuevoHandler(){
+  const fecha = document.getElementById('nmFecha').value;
+  if(!fecha){ toast('Selecciona el mes a crear', 'err'); return; }
+  const destino = sheetNameFromDate(fecha);
+  const origen = prevMonthSheet(fecha);
+  const btn = document.getElementById('btnCrearMes');
+  btn.disabled = true; btn.textContent = 'Creando…';
+  try{
+    const r = await apiPost({ action:'crearMes', origen, destino });
+    toast(`Hoja "${r.hoja}" creada correctamente`, 'ok');
+    delete catCache[destino];
+  }catch(e){
+    toast(e.message, 'err');
+  }finally{
+    btn.disabled = false; btn.textContent = 'Crear mes';
+  }
+}
+
 /* ---------------- Ajustes ---------------- */
 function toggleTokenVisibility(){
   const input = document.getElementById('sToken');
@@ -624,8 +808,13 @@ async function probarConexion(){
   const t = todayStr();
   document.getElementById('fFecha').value = t;
   document.getElementById('rMes').value = t;
+  document.getElementById('dFecha').value = t;
   document.getElementById('hdrMonthLabel').textContent = sheetNameFromDate(t);
   document.getElementById('fFecha').addEventListener('change', poblarCategorias);
+
+  document.getElementById('nmFecha').value = nextMonthFirstDay();
+  document.getElementById('nmFecha').addEventListener('change', actualizarPreviewMesNuevo);
+  actualizarPreviewMesNuevo();
 
   await poblarCategorias();
   const pending = await getPending();
