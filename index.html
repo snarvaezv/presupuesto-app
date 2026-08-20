@@ -2,10 +2,12 @@
 <html lang="es">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1.0, user-scalable=no">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Presupuesto">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="icon" type="image/png" href="icon-32.png">
 <title>Presupuesto</title>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600;700&display=swap');
@@ -17,9 +19,9 @@
     --line:#DDE3EC;
     --ink:#1C2A3A;
     --ink-soft:#5B6B80;
-    --primary:#2C5AA0;
-    --primary-dark:#1E3F73;
-    --primary-tint:#E4ECF7;
+    --primary:#009900;
+    --primary-dark:#046B0A;
+    --primary-tint:#E1F5E1;
     --ok:#2F9E67;
     --ok-tint:#E4F5EC;
     --warn:#C77D14;
@@ -93,9 +95,11 @@
   label{display:block; font-size:12px; font-weight:600; color:var(--ink-soft); margin-bottom:6px; margin-top:14px;}
   label:first-of-type{margin-top:0;}
   input[type=date], input[type=text], input[type=number], select{
-    width:100%; padding:12px 13px; border-radius:11px; border:1.5px solid var(--line);
-    background:var(--surface-2); font-size:15.5px; color:var(--ink); font-family:inherit;
+    width:100%; min-width:0; padding:12px 13px; border-radius:11px; border:1.5px solid var(--line);
+    background:var(--surface-2); font-size:16px; color:var(--ink); font-family:inherit;
+    -webkit-appearance:none; appearance:none;
   }
+  input[type=date]{ min-height:44px; }
   select{appearance:none; background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%235B6B80' stroke-width='1.6' fill='none' stroke-linecap='round'/%3E%3C/svg%3E"); background-repeat:no-repeat; background-position:right 14px center;}
   input:focus, select:focus{outline:none; border-color:var(--primary); background:#fff;}
   .valor-wrap{position:relative;}
@@ -232,7 +236,11 @@
         <input type="date" id="fFecha">
 
         <label>Categoría</label>
-        <select id="fTipo"></select>
+        <select id="fTipo" onchange="onTipoChange()"></select>
+        <div id="customCatWrap" class="hidden">
+          <input type="text" id="fTipoCustom" placeholder="Nombre de la categoría nueva" style="margin-top:8px;">
+          <div class="help-text">Se guardará en tu Excel tal cual la escribas. No aparecerá en el resumen de presupuesto hasta que agregues esta categoría manualmente a las columnas de presupuesto (H) y Pareto (M) en tu Sheet.</div>
+        </div>
 
         <label>Valor (COP)</label>
         <div class="valor-wrap">
@@ -396,6 +404,18 @@ function setNaturaleza(n){
   document.getElementById('btnIngreso').classList.toggle('active-ingreso', n==='ingreso');
 }
 
+function getCustomCategorias(){
+  try{ return JSON.parse(localStorage.getItem('presupuesto_custom_cats') || '[]'); }
+  catch(e){ return []; }
+}
+function addCustomCategoria(nombre){
+  const cats = getCustomCategorias();
+  if(!cats.includes(nombre)){
+    cats.push(nombre);
+    localStorage.setItem('presupuesto_custom_cats', JSON.stringify(cats));
+  }
+}
+
 async function poblarCategorias(){
   const sel = document.getElementById('fTipo');
   const fecha = document.getElementById('fFecha').value || todayStr();
@@ -410,15 +430,30 @@ async function poblarCategorias(){
       cats = CATEGORIAS_FALLBACK;
     }
   }
-  sel.innerHTML = cats.map(c=>`<option value="${c}">${c}</option>`).join('');
+  const custom = getCustomCategorias().filter(c => !cats.includes(c));
+  const opciones = [...cats, ...custom];
+  sel.innerHTML = opciones.map(c=>`<option value="${c}">${c}</option>`).join('')
+    + `<option value="__custom__">+ Categoría nueva…</option>`;
+  onTipoChange();
+}
+
+function onTipoChange(){
+  const sel = document.getElementById('fTipo');
+  const wrap = document.getElementById('customCatWrap');
+  wrap.classList.toggle('hidden', sel.value !== '__custom__');
 }
 
 async function guardarRegistro(){
   const fecha = document.getElementById('fFecha').value;
-  const tipo = document.getElementById('fTipo').value;
+  let tipo = document.getElementById('fTipo').value;
   let valor = parseFloat(document.getElementById('fValor').value);
   const obs = document.getElementById('fObs').value.trim();
   const obs2 = document.getElementById('fObs2').value.trim();
+
+  if(tipo === '__custom__'){
+    tipo = document.getElementById('fTipoCustom').value.trim();
+    if(!tipo){ toast('Escribe el nombre de la categoría nueva', 'err'); return; }
+  }
 
   if(!fecha){ toast('Selecciona una fecha', 'err'); return; }
   if(!tipo){ toast('Selecciona una categoría', 'err'); return; }
@@ -431,17 +466,23 @@ async function guardarRegistro(){
   const btn = document.getElementById('btnGuardar');
   btn.disabled = true; btn.textContent = 'Guardando…';
 
+  const esCustom = document.getElementById('fTipo').value === '__custom__';
+
   try{
     const r = await apiPost(payload);
     toast(`Guardado en ${sheet}, fila ${r.fila}`, 'ok');
+    if(esCustom) addCustomCategoria(tipo);
     limpiarFormulario();
     delete catCache[sheet];
+    poblarCategorias();
   }catch(e){
     const pending = await getPending();
     pending.push(payload);
     await setPending(pending);
+    if(esCustom) addCustomCategoria(tipo);
     toast('Sin conexión: guardado localmente, se sincronizará luego', 'warn');
     limpiarFormulario();
+    poblarCategorias();
   }finally{
     btn.disabled = false; btn.textContent = 'Guardar';
   }
@@ -451,6 +492,8 @@ function limpiarFormulario(){
   document.getElementById('fValor').value = '';
   document.getElementById('fObs').value = '';
   document.getElementById('fObs2').value = '';
+  document.getElementById('fTipoCustom').value = '';
+  document.getElementById('customCatWrap').classList.add('hidden');
   setNaturaleza('gasto');
 }
 
