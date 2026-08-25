@@ -204,15 +204,20 @@
   .dias-badge.warn{background:var(--warn-tint); color:var(--warn);}
   .dias-badge.danger{background:var(--danger-tint); color:var(--danger);}
 
-  .ultimo-row{display:flex; justify-content:space-between; align-items:center; padding:10px 0; border-bottom:1px solid var(--line);}
+  .ultimo-row{display:flex; justify-content:space-between; align-items:center; padding:10px 0; border-bottom:1px solid var(--line); cursor:pointer;}
+  .ultimo-row:active{background:var(--surface-2);}
   .ultimo-row:last-child{border-bottom:none;}
   .ultimo-row .left{display:flex; flex-direction:column; min-width:0; padding-right:10px;}
   .ultimo-row .fecha-cat{display:flex; gap:7px; align-items:baseline;}
   .ultimo-row .fecha{font-size:11.5px; color:var(--ink-soft); font-weight:600; white-space:nowrap;}
   .ultimo-row .cat{font-size:14px; font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
   .ultimo-row .obs{font-size:12px; color:var(--ink-soft); margin-top:1px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
-  .ultimo-row .val{font-weight:700; white-space:nowrap; flex-shrink:0;}
+  .ultimo-row .right{display:flex; align-items:center; gap:6px; flex-shrink:0;}
+  .ultimo-row .val{font-weight:700; white-space:nowrap;}
   .ultimo-row .val.neg{color:var(--ok);}
+  .ultimo-row .chev{color:var(--line); font-size:15px;}
+
+  .btn-secondary.danger{color:var(--danger); border-color:var(--danger);}
 
   /* ---------- Ajustes ---------- */
   .conn-status{display:flex; align-items:center; gap:8px; font-size:13.5px; font-weight:600; margin-top:12px;}
@@ -307,6 +312,21 @@
       <div class="section-title">Últimos registros</div>
       <div class="card" id="ultimosWrap">
         <div class="empty-state"><div class="ic">🧾</div>Cargando…</div>
+      </div>
+
+      <div class="card hidden" id="editPanel">
+        <div class="section-title" style="margin-top:0">Editar registro</div>
+        <label style="margin-top:0">Fecha</label>
+        <input type="date" id="eFecha">
+        <label>Categoría</label>
+        <select id="eTipo"></select>
+        <label>Valor (COP)</label>
+        <div class="valor-wrap"><span>$</span><input type="number" id="eValor" inputmode="decimal" min="0"></div>
+        <label>Observación</label>
+        <input type="text" id="eObs">
+        <button class="btn-primary" id="btnGuardarEdicion" onclick="guardarEdicion()">Guardar cambios</button>
+        <button class="btn-secondary danger" id="btnEliminarEdicion" onclick="eliminarRegistro()">Eliminar registro</button>
+        <button class="btn-secondary" onclick="cerrarEdicion()">Cancelar</button>
       </div>
     </div>
 
@@ -691,6 +711,8 @@ async function cargarResumen(){
 }
 
 /* ---------------- Últimos registros ---------------- */
+let ultimosCache = [];
+
 async function cargarUltimos(){
   const wrap = document.getElementById('ultimosWrap');
   const hoyStr = todayStr();
@@ -698,12 +720,13 @@ async function cargarUltimos(){
   const prevSheet = prevMonthSheet(hoyStr);
   try{
     const r = await apiGet('ultimos', { sheet, prevSheet, n: 8 });
+    ultimosCache = r.gastos;
     if(!r.gastos.length){
       wrap.innerHTML = `<div class="empty-state"><div class="ic">🧾</div>Todavía no hay registros</div>`;
       return;
     }
 
-    const hoy = new Date(todayStr() + 'T00:00:00');
+    const hoy = new Date(hoyStr + 'T00:00:00');
     const ultima = new Date(r.gastos[0].fecha + 'T00:00:00');
     const diffDias = Math.round((hoy - ultima) / 86400000);
     let cls = 'ok', texto = 'Reportado hoy';
@@ -713,24 +736,123 @@ async function cargarUltimos(){
     else if(diffDias < 0){ cls = 'ok'; texto = 'Al día'; }
 
     const badge = `<div class="dias-badge ${cls}">${texto}</div>`;
-    const filas = r.gastos.map(g=>{
+    const filas = r.gastos.map((g,i)=>{
       const d = new Date(g.fecha + 'T00:00:00');
       const fechaCorta = d.toLocaleDateString('es-CO', {day:'numeric', month:'short'});
       const esIngreso = g.valor < 0;
       const valorAbs = Math.abs(g.valor);
       return `
-        <div class="ultimo-row">
+        <div class="ultimo-row" onclick="abrirEdicion(${i})">
           <div class="left">
             <div class="fecha-cat"><span class="fecha">${fechaCorta}</span><span class="cat">${g.tipo}</span></div>
             ${g.obs ? `<div class="obs">${g.obs}</div>` : ''}
           </div>
-          <div class="val num ${esIngreso?'neg':''}">${esIngreso?'+':''}${fmt.format(valorAbs)}</div>
+          <div class="right">
+            <span class="val num ${esIngreso?'neg':''}">${esIngreso?'+':''}${fmt.format(valorAbs)}</span>
+            <span class="chev">›</span>
+          </div>
         </div>`;
     }).join('');
 
     wrap.innerHTML = badge + filas;
   }catch(e){
     wrap.innerHTML = `<div class="empty-state"><div class="ic">⚠️</div>${e.message}</div>`;
+  }
+}
+
+async function poblarCategoriasEdit(sheetName, tipoActual){
+  let cats = catCache[sheetName];
+  if(!cats){
+    try{
+      const r = await apiGet('resumen', {sheet: sheetName});
+      cats = r.categorias.map(c=>c.nombre);
+      catCache[sheetName] = cats;
+    }catch(e){ cats = CATEGORIAS_FALLBACK; }
+  }
+  const custom = getCustomCategorias().filter(c => !cats.includes(c));
+  let opciones = [...cats, ...custom];
+  if(!opciones.includes(tipoActual)) opciones = [tipoActual, ...opciones];
+  const sel = document.getElementById('eTipo');
+  sel.innerHTML = opciones.map(c=>`<option value="${c}">${c}</option>`).join('');
+  sel.value = tipoActual;
+}
+
+function abrirEdicion(i){
+  const g = ultimosCache[i];
+  if(!g) return;
+  const panel = document.getElementById('editPanel');
+  panel.dataset.original = JSON.stringify(g);
+  panel.classList.remove('hidden');
+  document.getElementById('eFecha').value = g.fecha;
+  document.getElementById('eValor').value = Math.abs(g.valor);
+  document.getElementById('eObs').value = g.obs || '';
+  poblarCategoriasEdit(g.hoja, g.tipo);
+  panel.scrollIntoView({behavior:'smooth', block:'center'});
+}
+
+function cerrarEdicion(){
+  document.getElementById('editPanel').classList.add('hidden');
+}
+
+async function guardarEdicion(){
+  const panel = document.getElementById('editPanel');
+  const original = JSON.parse(panel.dataset.original);
+  const nuevaFecha = document.getElementById('eFecha').value;
+  const nuevoTipo = document.getElementById('eTipo').value;
+  let nuevoValor = parseFloat(document.getElementById('eValor').value);
+  const nuevoObs = document.getElementById('eObs').value.trim();
+
+  if(!nuevaFecha){ toast('Selecciona una fecha', 'err'); return; }
+  if(!nuevoValor || nuevoValor <= 0){ toast('Ingresa un valor válido', 'err'); return; }
+  if(original.valor < 0) nuevoValor = -Math.abs(nuevoValor); // conserva si era ingreso
+
+  const btn = document.getElementById('btnGuardarEdicion');
+  btn.disabled = true; btn.textContent = 'Guardando…';
+  try{
+    await apiPost({
+      action: 'editarGasto',
+      hoja: original.hoja,
+      fila: original.fila,
+      fechaOriginal: original.fecha,
+      tipoOriginal: original.tipo,
+      valorOriginal: original.valor,
+      nuevaFecha, nuevoTipo, nuevoValor, nuevoObs, nuevoObs2: ''
+    });
+    toast('Registro actualizado', 'ok');
+    cerrarEdicion();
+    delete catCache[original.hoja];
+    cargarUltimos();
+  }catch(e){
+    toast(e.message, 'err');
+  }finally{
+    btn.disabled = false; btn.textContent = 'Guardar cambios';
+  }
+}
+
+async function eliminarRegistro(){
+  const panel = document.getElementById('editPanel');
+  const original = JSON.parse(panel.dataset.original);
+  if(!confirm(`¿Eliminar "${original.tipo}" del ${original.fecha} por ${fmt.format(Math.abs(original.valor))}?`)) return;
+
+  const btn = document.getElementById('btnEliminarEdicion');
+  btn.disabled = true; btn.textContent = 'Eliminando…';
+  try{
+    await apiPost({
+      action: 'eliminarGasto',
+      hoja: original.hoja,
+      fila: original.fila,
+      fechaOriginal: original.fecha,
+      tipoOriginal: original.tipo,
+      valorOriginal: original.valor
+    });
+    toast('Registro eliminado', 'ok');
+    cerrarEdicion();
+    delete catCache[original.hoja];
+    cargarUltimos();
+  }catch(e){
+    toast(e.message, 'err');
+  }finally{
+    btn.disabled = false; btn.textContent = 'Eliminar registro';
   }
 }
 
