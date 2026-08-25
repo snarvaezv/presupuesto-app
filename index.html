@@ -79,8 +79,13 @@
   header .balance-card{flex:1; background:rgba(255,255,255,.1); border-radius:12px; padding:10px 12px;}
   header .balance-card .lbl{font-size:11px; opacity:.8; text-transform:uppercase; letter-spacing:.05em;}
   header .balance-card .val{font-size:17px; font-weight:700; margin-top:3px;}
-  header .progress-track{height:6px; background:rgba(255,255,255,.18); border-radius:4px; margin-top:16px; overflow:hidden; position:relative; z-index:1;}
-  header .progress-fill{height:100%; background:#fff; border-radius:4px; transition:width .5s ease;}
+  header .progress-header-row{display:flex; justify-content:space-between; align-items:baseline; margin-top:18px; position:relative; z-index:1;}
+  header .progress-caption{font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:.05em; opacity:.75;}
+  header .progress-pct{font-size:13px; font-weight:700;}
+  header .progress-track{height:8px; background:rgba(255,255,255,.18); border-radius:4px; margin-top:7px; overflow:hidden; position:relative; z-index:1;}
+  header .progress-fill{height:100%; border-radius:4px; transition:width .5s ease, background-color .3s ease; background:#fff;}
+  header .progress-fill.warn{background:#FFD98F;}
+  header .progress-fill.over{background:#FFAFAF;}
   header .diff-lbl{margin-top:9px; font-size:12px; font-weight:600; color:rgba(255,255,255,.75); position:relative; z-index:1;}
   header .diff-lbl .amt{font-weight:700;}
   header .diff-lbl .amt.pos{color:#8FE3A8;}
@@ -269,6 +274,10 @@
         <div class="lbl">Presupuestado</div>
         <div class="val num" id="hdrPresupuestado">$0</div>
       </div>
+    </div>
+    <div class="progress-header-row">
+      <span class="progress-caption">Presupuesto usado</span>
+      <span class="progress-pct" id="hdrProgressPct">0%</span>
     </div>
     <div class="progress-track"><div class="progress-fill" id="hdrProgress" style="width:0%"></div></div>
     <div class="diff-lbl" id="hdrDiff"></div>
@@ -666,8 +675,14 @@ async function cargarResumen(){
     document.getElementById('hdrMonthValue').textContent = fmt.format(r.totalGastado) + ' gastado';
     document.getElementById('hdrGastado').textContent = fmt.format(r.totalGastado);
     document.getElementById('hdrPresupuestado').textContent = fmt.format(r.totalPresupuestado);
-    const pct = r.totalPresupuestado ? Math.min(100, (r.totalGastado/r.totalPresupuestado)*100) : 0;
-    document.getElementById('hdrProgress').style.width = pct + '%';
+    const pctRaw = r.totalPresupuestado ? (r.totalGastado/r.totalPresupuestado)*100 : 0;
+    const pct = Math.min(100, pctRaw);
+    const fillEl = document.getElementById('hdrProgress');
+    fillEl.style.width = pct + '%';
+    fillEl.classList.remove('warn','over');
+    if(pctRaw >= 100) fillEl.classList.add('over');
+    else if(pctRaw >= 80) fillEl.classList.add('warn');
+    document.getElementById('hdrProgressPct').textContent = Math.round(pctRaw) + '%';
 
     const diff = r.totalPresupuestado - r.totalGastado;
     const diffCls = diff < 0 ? 'neg' : 'pos';
