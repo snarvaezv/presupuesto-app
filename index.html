@@ -81,6 +81,10 @@
   header .balance-card .val{font-size:17px; font-weight:700; margin-top:3px;}
   header .progress-track{height:6px; background:rgba(255,255,255,.18); border-radius:4px; margin-top:16px; overflow:hidden; position:relative; z-index:1;}
   header .progress-fill{height:100%; background:#fff; border-radius:4px; transition:width .5s ease;}
+  header .diff-lbl{margin-top:9px; font-size:12px; font-weight:600; color:rgba(255,255,255,.75); position:relative; z-index:1;}
+  header .diff-lbl .amt{font-weight:700;}
+  header .diff-lbl .amt.pos{color:#8FE3A8;}
+  header .diff-lbl .amt.neg{color:#FFAFAF;}
 
   /* ---------- Main scroll area ---------- */
   main{flex:1; padding:18px 16px 100px; overflow-y:auto;}
@@ -267,6 +271,7 @@
       </div>
     </div>
     <div class="progress-track"><div class="progress-fill" id="hdrProgress" style="width:0%"></div></div>
+    <div class="diff-lbl" id="hdrDiff"></div>
   </header>
 
   <main>
@@ -663,6 +668,13 @@ async function cargarResumen(){
     document.getElementById('hdrPresupuestado').textContent = fmt.format(r.totalPresupuestado);
     const pct = r.totalPresupuestado ? Math.min(100, (r.totalGastado/r.totalPresupuestado)*100) : 0;
     document.getElementById('hdrProgress').style.width = pct + '%';
+
+    const diff = r.totalPresupuestado - r.totalGastado;
+    const diffCls = diff < 0 ? 'neg' : 'pos';
+    const diffTexto = diff < 0
+      ? `Te pasaste por <span class="amt neg">${fmt.format(Math.abs(diff))}</span>`
+      : `Te quedan <span class="amt pos">${fmt.format(diff)}</span>`;
+    document.getElementById('hdrDiff').innerHTML = diffTexto;
 
     const g = r.general || {};
     const statDefs = [
