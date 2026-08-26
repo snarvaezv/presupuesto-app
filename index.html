@@ -521,6 +521,14 @@ async function apiPost(payload){
   if(!json.ok) throw new Error(json.error || 'Error desconocido');
   return json;
 }
+// Identificador único por intento de guardado — viaja igual en cada reintento
+// (incluida la cola sin conexión) para que el servidor detecte un envío
+// duplicado y no lo registre dos veces.
+function generarIdem(){
+  if(window.crypto && crypto.randomUUID) return crypto.randomUUID();
+  return Date.now() + '-' + Math.random().toString(36).slice(2);
+}
+
 
 /* ---------------- Toast ---------------- */
 let toastTimer;
@@ -610,7 +618,7 @@ async function guardarRegistro(){
   if(naturaleza === 'ingreso') valor = -Math.abs(valor); // los ingresos restan del acumulado de gastos, como en tu Excel
 
   const sheet = sheetNameFromDate(fecha);
-  const payload = { action:'gasto', sheet, fecha, tipo, valor, obs, obs2 };
+  const payload = { action:'gasto', sheet, fecha, tipo, valor, obs, obs2, idem: generarIdem() };
 
   const btn = document.getElementById('btnGuardar');
   btn.disabled = true; btn.textContent = 'Guardando…';
@@ -933,7 +941,7 @@ async function registrarAbono(){
   const btn = document.getElementById('btnAbono');
   btn.disabled = true; btn.textContent = 'Registrando…';
   try{
-    const r = await apiPost({ action:'abono', fecha, valor, nota, sheetMes });
+    const r = await apiPost({ action:'abono', fecha, valor, nota, sheetMes, idem: generarIdem() });
     toast(`Abono #${r.cuota} registrado — también contado en ${sheetMes}`, 'ok');
     document.getElementById('dValor').value = '';
     document.getElementById('dNota').value = '';
