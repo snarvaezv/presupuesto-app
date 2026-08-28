@@ -1012,12 +1012,35 @@ function nextMonthFirstDay(){
   const nm = m===11 ? 0 : m+1;
   return `${ny}-${String(nm+1).padStart(2,'0')}-01`;
 }
+function nextMonthFirstDayFrom(dateStr){
+  const [y,m] = dateStr.split('-').map(Number);
+  let ny = y, nm = m + 1;
+  if(nm > 12){ nm = 1; ny += 1; }
+  return `${ny}-${String(nm).padStart(2,'0')}-01`;
+}
 function actualizarPreviewMesNuevo(){
   const fecha = document.getElementById('nmFecha').value;
   if(!fecha) return;
   const destino = sheetNameFromDate(fecha);
   const origen = prevMonthSheet(fecha);
   document.getElementById('nmPreview').textContent = `Se creará "${destino}" copiando el formato de "${origen}".`;
+}
+// Si el mes propuesto ya existe en el Sheet (creado antes por la app o a mano),
+// avanza solo hasta encontrar el primer mes que todavía no existe.
+async function avanzarMesNuevoSiYaExiste(){
+  if(!CONFIG.url || !CONFIG.token) return;
+  let fecha = document.getElementById('nmFecha').value || nextMonthFirstDay();
+  for(let intentos = 0; intentos < 24; intentos++){
+    const destino = sheetNameFromDate(fecha);
+    try{
+      await apiGet('resumen', { sheet: destino });
+      fecha = nextMonthFirstDayFrom(fecha); // ya existe, probar el siguiente
+    }catch(e){
+      break; // no existe (o hubo otro problema): este es el candidato, paramos aquí
+    }
+  }
+  document.getElementById('nmFecha').value = fecha;
+  actualizarPreviewMesNuevo();
 }
 async function crearMesNuevoHandler(){
   const fecha = document.getElementById('nmFecha').value;
@@ -1030,6 +1053,8 @@ async function crearMesNuevoHandler(){
     const r = await apiPost({ action:'crearMes', origen, destino });
     toast(`Hoja "${r.hoja}" creada correctamente`, 'ok');
     delete catCache[destino];
+    document.getElementById('nmFecha').value = nextMonthFirstDayFrom(fecha);
+    actualizarPreviewMesNuevo();
   }catch(e){
     toast(e.message, 'err');
   }finally{
@@ -1096,6 +1121,7 @@ async function probarConexion(){
     cargarResumen();
     cargarUltimos();
     syncPending(false);
+    avanzarMesNuevoSiYaExiste();
   } else {
     showView('ajustes');
     toast('Configura tu conexión con Google Sheets para empezar', 'warn');
