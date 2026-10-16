@@ -92,7 +92,9 @@
   header .progress-fill.warn{background:#FFD98F;}
   header .progress-fill.over{background:#FFAFAF;}
   header .diff-lbl{margin-top:9px; font-size:12px; font-weight:600; color:rgba(255,255,255,.75); position:relative; z-index:1;}
+  header .diff-lbl{display:flex; flex-wrap:wrap; justify-content:space-between; gap:2px 14px;}
   header .diff-lbl .amt{font-weight:700;}
+  header .diff-lbl .amt.neu{color:#fff;}
   header .diff-lbl .amt.pos{color:#8FE3A8;}
   header .diff-lbl .amt.neg{color:#FFAFAF;}
 
@@ -830,7 +832,11 @@ async function cargarResumen(){
     const diffTexto = diff < 0
       ? `Te pasaste por <span class="amt neg">${fmt.format(Math.abs(diff))}</span>`
       : `Te quedan <span class="amt pos">${fmt.format(diff)}</span>`;
-    document.getElementById('hdrDiff').innerHTML = diffTexto;
+    // Por gastar según presupuesto: lo que aún falta por gastar en las categorías que no han llegado a su tope
+    // (los excesos de otras categorías no lo reducen).
+    const porGastar = r.categorias.reduce((t,c) => t + Math.max(0, (c.presupuestado||0) - (c.gastado||0)), 0);
+    document.getElementById('hdrDiff').innerHTML =
+      `<span>${diffTexto}</span><span>Por gastar según presupuesto <span class="amt neu">${fmt.format(porGastar)}</span></span>`;
 
     const g = r.general || {};
     const statDefs = [
