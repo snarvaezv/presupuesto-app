@@ -309,12 +309,14 @@
   }
   nav button{
     flex:1; background:none; border:none; display:flex; flex-direction:column; align-items:center; gap:3px;
-    padding:6px 0; color:var(--ink-soft); font-family:inherit;
+    padding:6px 0; margin:0 3px; border-radius:14px; border:1.5px solid transparent;
+    color:var(--ink-soft); font-family:inherit; transition:background .15s ease, border-color .15s ease, color .15s ease;
   }
   nav button .ic{font-size:20px; line-height:0;}
   nav button .ic svg{width:20px; height:20px;}
   nav button .lbl{font-size:10.5px; font-weight:600;}
-  nav button.active{color:var(--primary);}
+  nav button.active{background:#FCE9CF; border-color:#E08A1E; color:#8A4B05;}
+  nav button.active .lbl{font-weight:700;}
 
   ::-webkit-scrollbar{display:none;}
 </style>
