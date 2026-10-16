@@ -200,6 +200,28 @@
   .pareto-legend .lg-ing{width:16px; height:0; border-top:2.5px solid var(--ok);}
   .pareto-legend .lg-pre{width:16px; height:0; border-top:2.5px solid #E08A1E;}
 
+  /* ---------- Dona y Presupuesto vs gastado ---------- */
+  #pieChart svg{display:block; width:200px; height:200px; margin:0 auto; overflow:visible;}
+  .pie-slice{cursor:pointer; transition:opacity .15s ease, transform .15s ease; transform-origin:100px 100px;}
+  .pie-slice.dim{opacity:.35;}
+  .pie-center-v{fill:var(--ink); font-size:14px; font-weight:700; font-family:'IBM Plex Mono',monospace;}
+  .pie-center-l{fill:var(--ink-soft); font-size:10px; font-weight:600;}
+  .pie-legend{display:grid; grid-template-columns:1fr; gap:2px; margin-top:12px;}
+  .pie-leg-row{display:flex; align-items:center; gap:8px; padding:6px 4px; border-radius:8px; font-size:12.5px; cursor:pointer;}
+  .pie-leg-row.sel{background:var(--primary-tint);}
+  .pie-leg-row i{width:10px; height:10px; border-radius:3px; flex:none;}
+  .pie-leg-row .nm{flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--ink); font-weight:500;}
+  .pie-leg-row .pc{color:var(--ink-soft); font-family:'IBM Plex Mono',monospace; font-size:11.5px;}
+  .pie-leg-row .am{color:var(--ink); font-family:'IBM Plex Mono',monospace; font-size:11.5px; font-weight:600; min-width:72px; text-align:right;}
+  #catChart svg{display:block; width:100%; height:auto; overflow:visible;}
+  .cat-lbl{fill:var(--ink); font-size:10.5px; font-weight:500;}
+  .cat-bar-g{fill:var(--danger);}
+  .cat-bar-p{fill:#A9CCE3;}
+  .cat-val{fill:var(--ink-soft); font-size:9.5px; font-family:'IBM Plex Mono',monospace;}
+  .cat-rowsel{fill:var(--primary-tint);}
+  .pareto-legend .lg-cg{width:10px; height:10px; border-radius:2px; background:var(--danger);}
+  .pareto-legend .lg-cp{width:10px; height:10px; border-radius:2px; background:#A9CCE3;}
+
   /* ---------- Pareto ---------- */
   .pareto-legend{display:flex; gap:14px; flex-wrap:wrap; font-size:11.5px; font-weight:600; color:var(--ink-soft); margin-bottom:6px;}
   .pareto-legend span{display:inline-flex; align-items:center; gap:6px;}
@@ -424,7 +446,13 @@
         <div class="pareto-detail" id="paretoDetail"></div>
       </div>
 
-      <div class="section-title">Presupuesto por categoría</div>
+      <div class="section-title">¿En qué se va el dinero?</div>
+      <div class="card hidden" id="pieCard">
+        <div id="pieChart"></div>
+        <div class="pie-legend" id="pieLegend"></div>
+      </div>
+
+      <div class="section-title">Presupuesto vs. gastado</div>
       <div class="card" id="resumenCategorias">
         <div class="empty-state"><div class="ic"><svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><rect x="3" y="12" width="4" height="9" rx="1"/><rect x="10" y="5" width="4" height="16" rx="1"/><rect x="17" y="9" width="4" height="12" rx="1"/></svg></div>Cargando resumen…</div>
       </div>
@@ -827,29 +855,12 @@ async function cargarResumen(){
     renderPareto(r.categorias);
     renderRitmo(r.ritmo);
 
-    if(r.categorias.length === 0){
-      cont.innerHTML = `<div class="empty-state"><div class="ic">${ICON.inbox}</div>Sin categorías configuradas en ${sheet}</div>`;
-      return;
-    }
-
-    const categoriasOrdenadas = [...r.categorias].sort((a,b) => b.gastado - a.gastado);
-
-    cont.innerHTML = categoriasOrdenadas.map(c=>{
-      const pctC = c.presupuestado ? (c.gastado/c.presupuestado)*100 : (c.gastado>0?100:0);
-      let cls = 'ok';
-      if(pctC >= 100) cls = 'over'; else if(pctC >= 80) cls = 'warn';
-      return `
-        <div class="cat-row">
-          <div class="cat-top">
-            <div class="cat-name">${c.nombre}</div>
-            <div class="cat-amounts"><b class="num">${fmt.format(c.gastado)}</b> / <span class="num">${fmt.format(c.presupuestado)}</span></div>
-          </div>
-          <div class="bar-track"><div class="bar-fill ${cls}" style="width:${Math.min(100,pctC)}%"></div></div>
-        </div>`;
-    }).join('');
+    renderPie(r.categorias);
+    renderCatChart(r.categorias);
   }catch(e){
     document.getElementById('paretoCard').classList.add('hidden');
     document.getElementById('ritmoCard').classList.add('hidden');
+    document.getElementById('pieCard').classList.add('hidden');
     cont.innerHTML = `<div class="empty-state"><div class="ic">${ICON.warning}</div>${e.message}</div>`;
   }
 }
@@ -883,6 +894,119 @@ function calcularPareto(categorias){
     if(cruce80 === -1 && c.acum >= 0.8) cruce80 = i;
   });
   return {items, total, cruce80};
+}
+
+/* ---------------- Dona: ¿En qué se va el dinero? ---------------- */
+const PIE_COLORS = ['#2C5AA0','#E08A1E','#2F9E67','#C23B3B','#7B5EA7','#14A3B8','#B8860B','#8A97A8'];
+let pieItems = [];
+
+function pieArcPath(cx, cy, R, r, a0, a1){
+  const pt = (rad, a) => [cx + rad*Math.cos(a), cy + rad*Math.sin(a)];
+  if(a1 - a0 >= Math.PI*2 - 1e-6){
+    return `M${cx+R},${cy} A${R},${R} 0 1 1 ${cx-R},${cy} A${R},${R} 0 1 1 ${cx+R},${cy} Z M${cx+r},${cy} A${r},${r} 0 1 0 ${cx-r},${cy} A${r},${r} 0 1 0 ${cx+r},${cy} Z`;
+  }
+  const large = (a1 - a0) > Math.PI ? 1 : 0;
+  const [x0,y0] = pt(R,a0), [x1,y1] = pt(R,a1), [x2,y2] = pt(r,a1), [x3,y3] = pt(r,a0);
+  return `M${x0},${y0} A${R},${R} 0 ${large} 1 ${x1},${y1} L${x2},${y2} A${r},${r} 0 ${large} 0 ${x3},${y3} Z`;
+}
+
+function renderPie(categorias){
+  const card = document.getElementById('pieCard');
+  const con = categorias.filter(c => c.gastado > 0).sort((a,b) => b.gastado - a.gastado);
+  const total = con.reduce((t,c) => t + c.gastado, 0);
+  if(!con.length || total <= 0){ card.classList.add('hidden'); return; }
+  card.classList.remove('hidden');
+
+  const TOP = 7;
+  let items = con.slice(0, TOP).map(c => ({nombre:c.nombre, valor:c.gastado}));
+  if(con.length > TOP){
+    items.push({nombre:'Otras (' + (con.length - TOP) + ')', valor:con.slice(TOP).reduce((t,c) => t + c.gastado, 0)});
+  }
+  items.forEach((it,i) => { it.pct = it.valor / total; it.color = PIE_COLORS[i % PIE_COLORS.length]; });
+  pieItems = items; 
+
+  const cx = 100, cy = 100, R = 92, r = 54;
+  let a = -Math.PI/2, svg = '<svg viewBox="0 0 200 200" role="img" aria-label="Distribución del gasto por categoría">';
+  items.forEach((it,i) => {
+    const a1 = a + it.pct * Math.PI * 2;
+    svg += `<path class="pie-slice" id="ps${i}" d="${pieArcPath(cx,cy,R,r,a,a1)}" fill="${it.color}" fill-rule="evenodd" stroke="#fff" stroke-width="1.5" onclick="selectPie(${i})"/>`;
+    a = a1;
+  });
+  svg += `<text class="pie-center-v" id="pieCV" x="100" y="101" text-anchor="middle">${fmtCompact(total)}</text>`;
+  svg += `<text class="pie-center-l" id="pieCL" x="100" y="116" text-anchor="middle">gastado</text></svg>`;
+  document.getElementById('pieChart').innerHTML = svg;
+
+  document.getElementById('pieLegend').innerHTML = items.map((it,i) =>
+    `<div class="pie-leg-row" id="pl${i}" onclick="selectPie(${i})"><i style="background:${it.color}"></i><span class="nm">${escHtml(it.nombre)}</span><span class="pc">${fmtPct(it.pct)}</span><span class="am">${fmt.format(it.valor)}</span></div>`
+  ).join('');
+  pieTotal = total;
+}
+let pieTotal = 0, pieSelIdx = -1;
+
+function selectPie(i){
+  const same = pieSelIdx === i;
+  pieSelIdx = same ? -1 : i;
+  pieItems.forEach((it,k) => {
+    const sl = document.getElementById('ps'+k), lg = document.getElementById('pl'+k);
+    if(sl) sl.classList.toggle('dim', pieSelIdx >= 0 && k !== pieSelIdx);
+    if(lg) lg.classList.toggle('sel', k === pieSelIdx);
+  });
+  const cv = document.getElementById('pieCV'), cl = document.getElementById('pieCL');
+  if(pieSelIdx < 0){ cv.textContent = fmtCompact(pieTotal); cl.textContent = 'gastado'; }
+  else {
+    const it = pieItems[pieSelIdx];
+    cv.textContent = fmtPct(it.pct);
+    cl.textContent = it.nombre.length > 20 ? it.nombre.slice(0,19) + '…' : it.nombre;
+  }
+}
+
+/* ---------------- Presupuesto vs. gastado por categoría ---------------- */
+let catData = [];
+
+function renderCatChart(categorias){
+  const cont = document.getElementById('resumenCategorias');
+  const items = categorias.filter(c => c.gastado > 0 || c.presupuestado > 0)
+    .sort((a,b) => (b.gastado - a.gastado) || (b.presupuestado - a.presupuestado));
+  catData = items;
+  if(!items.length){
+    cont.innerHTML = `<div class="empty-state"><div class="ic">${ICON.inbox}</div>Sin categorías configuradas</div>`;
+    return;
+  }
+  const W = 360, ml = 120, mr = 50, rowH = 34, mt = 6, mb = 20;
+  const pw = W - ml - mr, H = mt + items.length*rowH + mb;
+  const maxV = Math.max(1, ...items.map(c => Math.max(c.gastado, c.presupuestado)));
+  const wv = v => Math.max(v > 0 ? 1.5 : 0, v / maxV * pw);
+
+  let svg = `<div class="pareto-legend"><span><i class="lg-cg"></i>Gastado</span><span><i class="lg-cp"></i>Presupuestado</span></div>`;
+  svg += `<div id="catChart"><svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Presupuesto frente a gastado por categoría">`;
+  [0,1].forEach(f => {
+    const x = ml + pw*f;
+    svg += `<line class="pareto-grid" x1="${x}" x2="${x}" y1="${mt}" y2="${mt+items.length*rowH}"/>`;
+    svg += `<text class="pareto-axis" x="${x}" y="${H-6}" text-anchor="${f===0?'start':'end'}">${fmtCompact(maxV*f)}</text>`;
+  });
+  items.forEach((c,i) => {
+    const y = mt + i*rowH;
+    const lbl = c.nombre.length > 21 ? c.nombre.slice(0,20) + '…' : c.nombre;
+    svg += `<rect class="cat-rowsel hidden" id="cr${i}" x="0" y="${y}" width="${W}" height="${rowH}" rx="6"/>`;
+    svg += `<text class="cat-lbl" x="${ml-8}" y="${y+rowH/2+3.5}" text-anchor="end">${escHtml(lbl)}</text>`;
+    svg += `<rect class="cat-bar-g" x="${ml}" y="${y+5}" width="${wv(c.gastado).toFixed(1)}" height="11" rx="2"/>`;
+    svg += `<text class="cat-val" x="${(ml+wv(c.gastado)+4).toFixed(1)}" y="${y+14}">${c.gastado>0?fmtCompact(c.gastado):''}</text>`;
+    svg += `<rect class="cat-bar-p" x="${ml}" y="${y+18}" width="${wv(c.presupuestado).toFixed(1)}" height="11" rx="2"/>`;
+    svg += `<text class="cat-val" x="${(ml+wv(c.presupuestado)+4).toFixed(1)}" y="${y+27}">${c.presupuestado>0?fmtCompact(c.presupuestado):''}</text>`;
+    svg += `<rect class="pareto-hit" x="0" y="${y}" width="${W}" height="${rowH}" onclick="selectCat(${i})"/>`;
+  });
+  svg += `</svg></div><div class="pareto-detail" id="catDetail">Toca una categoría para ver el detalle.</div>`;
+  cont.innerHTML = svg;
+}
+
+function selectCat(i){
+  const c = catData[i]; if(!c) return;
+  catData.forEach((_,k) => { const r = document.getElementById('cr'+k); if(r) r.classList.toggle('hidden', k !== i); });
+  const pct = c.presupuestado ? fmtPct(c.gastado / c.presupuestado) + ' del presupuesto' : 'sin presupuesto';
+  const dif = c.presupuestado - c.gastado;
+  const txt = dif >= 0 ? `quedan <b>${fmt.format(dif)}</b>` : `te pasaste por <b style="color:var(--danger)">${fmt.format(-dif)}</b>`;
+  document.getElementById('catDetail').innerHTML =
+    `<b>${escHtml(c.nombre)}</b> · gastado ${fmt.format(c.gastado)} de ${fmt.format(c.presupuestado)} · ${pct} · ${txt}`;
 }
 
 /* ---------------- Ritmo de gasto acumulado ---------------- */
