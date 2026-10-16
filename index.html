@@ -187,6 +187,28 @@
   .bar-fill.warn{background:var(--warn);}
   .bar-fill.over{background:var(--danger);}
 
+  /* ---------- Pareto ---------- */
+  .pareto-legend{display:flex; gap:14px; flex-wrap:wrap; font-size:11.5px; font-weight:600; color:var(--ink-soft); margin-bottom:6px;}
+  .pareto-legend span{display:inline-flex; align-items:center; gap:6px;}
+  .pareto-legend i{display:inline-block;}
+  .pareto-legend .lg-bar{width:10px; height:10px; border-radius:2px; background:var(--primary);}
+  .pareto-legend .lg-line{width:16px; height:0; border-top:2.5px solid #E08A1E;}
+  .pareto-legend .lg-80{width:16px; height:0; border-top:2px dashed var(--danger);}
+  #paretoChart svg{display:block; width:100%; height:auto; overflow:visible;}
+  .pareto-grid{stroke:var(--line); stroke-width:1;}
+  .pareto-axis{fill:var(--ink-soft); font-size:9.5px; font-family:'IBM Plex Mono',monospace;}
+  .pareto-label{fill:var(--ink); font-size:9.5px; font-weight:500;}
+  .pareto-bar{fill:var(--primary); transition:fill .15s ease, opacity .15s ease;}
+  .pareto-bar.tail{opacity:.42;}
+  .pareto-bar.sel{fill:var(--primary-dark); opacity:1;}
+  .pareto-line{fill:none; stroke:#E08A1E; stroke-width:2.2; stroke-linejoin:round; stroke-linecap:round;}
+  .pareto-dot{fill:#fff; stroke:#E08A1E; stroke-width:1.8;}
+  .pareto-80{stroke:var(--danger); stroke-width:1.6; stroke-dasharray:5 4; fill:none;}
+  .pareto-80-lbl{fill:var(--danger); font-size:9.5px; font-weight:700;}
+  .pareto-hit{fill:transparent; cursor:pointer;}
+  .pareto-detail{font-size:12.5px; color:var(--ink-soft); line-height:1.5; margin-top:8px; min-height:38px;}
+  .pareto-detail b{color:var(--ink);}
+
   .empty-state{text-align:center; padding:40px 20px; color:var(--ink-soft);}
   .empty-state .ic{margin-bottom:10px;}
   .empty-state .ic svg{width:34px; height:34px;}
@@ -366,6 +388,17 @@
       <input type="date" id="rMes" onchange="cargarResumen()">
 
       <div id="resumenGeneral" class="stat-grid"></div>
+
+      <div class="section-title">Pareto del gasto</div>
+      <div class="card" id="paretoCard">
+        <div class="pareto-legend">
+          <span><i class="lg-bar"></i>Gasto</span>
+          <span><i class="lg-line"></i>% acumulado</span>
+          <span><i class="lg-80"></i>80 %</span>
+        </div>
+        <div id="paretoChart"></div>
+        <div class="pareto-detail" id="paretoDetail"></div>
+      </div>
 
       <div class="section-title">Presupuesto por categoría</div>
       <div class="card" id="resumenCategorias">
@@ -766,6 +799,9 @@ async function cargarResumen(){
       return `<div class="stat-box"><div class="lbl">${lbl}</div><div class="val num">${display}</div></div>`;
     }).join('');
 
+    document.getElementById('paretoCard').classList.remove('hidden');
+    renderPareto(r.categorias);
+
     if(r.categorias.length === 0){
       cont.innerHTML = `<div class="empty-state"><div class="ic">${ICON.inbox}</div>Sin categorías configuradas en ${sheet}</div>`;
       return;
@@ -787,8 +823,121 @@ async function cargarResumen(){
         </div>`;
     }).join('');
   }catch(e){
+    document.getElementById('paretoCard').classList.add('hidden');
     cont.innerHTML = `<div class="empty-state"><div class="ic">${ICON.warning}</div>${e.message}</div>`;
   }
+}
+
+/* ---------------- Pareto del gasto ---------------- */
+let paretoData = [];
+
+function escHtml(s){
+  return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+function fmtCompact(n){
+  return new Intl.NumberFormat('es-CO', {notation:'compact', maximumFractionDigits:1}).format(n);
+}
+function fmtPct(x){
+  return (x*100).toLocaleString('es-CO', {maximumFractionDigits:1}) + ' %';
+}
+
+// Ordena las categorías por gasto (mayor a menor) y calcula el % acumulado.
+function calcularPareto(categorias){
+  const items = categorias
+    .filter(c => c.gastado > 0)
+    .map(c => ({nombre:c.nombre, valor:c.gastado}))
+    .sort((a,b) => b.valor - a.valor);
+  const total = items.reduce((s,c) => s + c.valor, 0);
+  let acum = 0;
+  let cruce80 = -1;
+  items.forEach((c,i) => {
+    acum += c.valor;
+    c.pct = total ? c.valor/total : 0;
+    c.acum = total ? acum/total : 0;
+    if(cruce80 === -1 && c.acum >= 0.8) cruce80 = i;
+  });
+  return {items, total, cruce80};
+}
+
+// Construye el SVG del Pareto: barras = gasto, línea = % acumulado, guía punteada = 80 %.
+// Ambos ejes comparten la misma escala (0 → total del gasto = 0 → 100 %), como un Pareto clásico.
+function buildParetoSVG(items, total, cruce80){
+  const W = 360, H = 300, ml = 50, mr = 34, mt = 16, mb = 90;
+  const pw = W - ml - mr, ph = H - mt - mb;
+  const n = items.length;
+  const step = pw / n;
+  const bw = Math.min(step * 0.64, 26);
+  const yv = frac => mt + ph - frac * ph;
+
+  let svg = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Gráfica de Pareto del gasto por categoría">`;
+
+  [0, .25, .5, .75, 1].forEach(f => {
+    const y = yv(f);
+    svg += `<line class="pareto-grid" x1="${ml}" x2="${ml+pw}" y1="${y}" y2="${y}"/>`;
+    svg += `<text class="pareto-axis" x="${ml-6}" y="${y+3}" text-anchor="end">${fmtCompact(total*f)}</text>`;
+    svg += `<text class="pareto-axis" x="${ml+pw+6}" y="${y+3}" text-anchor="start">${Math.round(f*100)}%</text>`;
+  });
+
+  items.forEach((c,i) => {
+    const cx = ml + step*(i+.5);
+    const h = Math.max(1, (c.valor/total) * ph);
+    const tail = i > cruce80 ? ' tail' : '';
+    svg += `<rect class="pareto-bar${tail}" id="pb${i}" x="${cx-bw/2}" y="${mt+ph-h}" width="${bw}" height="${h}" rx="2"/>`;
+    const lbl = c.nombre.length > 18 ? c.nombre.slice(0,17) + '…' : c.nombre;
+    const ly = mt + ph + 10;
+    svg += `<text class="pareto-label" x="${cx}" y="${ly}" text-anchor="end" transform="rotate(-45 ${cx} ${ly})">${escHtml(lbl)}</text>`;
+  });
+
+  const y80 = yv(.8);
+  svg += `<line class="pareto-80" x1="${ml}" x2="${ml+pw}" y1="${y80}" y2="${y80}"/>`;
+  svg += `<text class="pareto-80-lbl" x="${ml+pw-2}" y="${y80-4}" text-anchor="end">80 %</text>`;
+
+  const pts = items.map((c,i) => `${(ml + step*(i+.5)).toFixed(1)},${yv(c.acum).toFixed(1)}`);
+  svg += `<polyline class="pareto-line" points="${pts.join(' ')}"/>`;
+  items.forEach((c,i) => {
+    svg += `<circle class="pareto-dot" cx="${(ml + step*(i+.5)).toFixed(1)}" cy="${yv(c.acum).toFixed(1)}" r="2.6"/>`;
+  });
+
+  items.forEach((c,i) => {
+    svg += `<rect class="pareto-hit" x="${ml + step*i}" y="${mt}" width="${step}" height="${ph + 60}" onclick="selectPareto(${i})"/>`;
+  });
+
+  return svg + '</svg>';
+}
+
+function paretoResumenTexto(){
+  const {items, cruce80} = paretoData;
+  const k = cruce80 + 1;
+  const cats = k === 1 ? 'categoría concentra' : 'categorías concentran';
+  const lista = items.slice(0, k).map(c => escHtml(c.nombre)).join(', ');
+  return `<b>${k} ${cats}</b> el 80 % del gasto: ${lista}. <span style="opacity:.8">Toca una barra para ver el detalle.</span>`;
+}
+
+function selectPareto(i){
+  const c = paretoData.items[i];
+  if(!c) return;
+  document.querySelectorAll('#paretoChart .pareto-bar').forEach(b => b.classList.remove('sel'));
+  const bar = document.getElementById('pb' + i);
+  if(bar) bar.classList.add('sel');
+  document.getElementById('paretoDetail').innerHTML =
+    `<b>${escHtml(c.nombre)}</b> · ${fmt.format(c.valor)} · ${fmtPct(c.pct)} del gasto · acumulado ${fmtPct(c.acum)}`;
+}
+
+function renderPareto(categorias){
+  const card = document.getElementById('paretoCard');
+  const chart = document.getElementById('paretoChart');
+  const detail = document.getElementById('paretoDetail');
+  const p = calcularPareto(categorias);
+  if(!p.items.length){
+    chart.innerHTML = `<div class="empty-state" style="padding:28px 10px"><div class="ic">${ICON.chart}</div>Aún no hay gastos este mes</div>`;
+    detail.innerHTML = '';
+    card.querySelector('.pareto-legend').classList.add('hidden');
+    return;
+  }
+  card.querySelector('.pareto-legend').classList.remove('hidden');
+  paretoData = p;
+  chart.innerHTML = buildParetoSVG(p.items, p.total, p.cruce80);
+  detail.innerHTML = paretoResumenTexto();
 }
 
 /* ---------------- Últimos registros ---------------- */
